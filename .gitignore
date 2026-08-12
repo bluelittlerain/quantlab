@@ -1,0 +1,73 @@
+# Python environments and generated metadata
+.venv/
+.build-venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Coverage and test output
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Build, package and release output
+build/
+build_*/
+build-*/
+dist/
+dist_*/
+dist-*/
+release/
+release-*/
+artifacts/
+*.exe
+*.dll
+*.pyd
+*.zip
+SHA256SUMS.txt
+*.spec
+!packaging/windows/QuantLab.spec
+
+# Runtime output and downloaded market data
+*.log
+*.out.log
+*.err.log
+/exports/
+/reports/
+/data/
+.streamlit/*
+!.streamlit/config.toml
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.toml
+
+# IDE and operating-system files
+.idea/
+.vscode/
+*.code-workspace
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Frontend dependencies and generated output
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/playwright-report/
+frontend/test-results/
+
+# Local screenshots and scratch files
+screenshots/
+tmp/
+temp/

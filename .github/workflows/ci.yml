@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONHASHSEED: "0"
+  QUANTLAB_OFFLINE: "1"
+  TZ: UTC
+
+jobs:
+  offline-quality-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.16.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install locked dependencies
+        run: |
+          python -m pip install --require-hashes -r requirements.lock
+          python -m pip install --no-build-isolation --no-deps -e .
+
+      - name: Build frontend assets for launcher tests
+        run: |
+          pnpm --dir frontend install --frozen-lockfile
+          pnpm --dir frontend build
+
+      - name: Ruff lint
+        run: python -m ruff check .
+
+      - name: Ruff format
+        run: python -m ruff format --check .
+
+      - name: Import production modules
+        run: >-
+          python -c "import quant_lab.backtest, quant_lab.data,
+          quant_lab.fingerprint, quant_lab.metrics, quant_lab.models,
+          quant_lab.presentation, quant_lab.report, quant_lab.strategies,
+          quant_lab.workflow, quant_lab.config, quant_lab.server;
+          import quant_lab.application.service, quant_lab.storage.repositories;
+          import app.components, app.streamlit_app"
+
+      - name: Offline tests and branch coverage
+        run: |
+          python -m coverage erase
+          python -m coverage run -m unittest discover -s tests
+          python -m coverage report --fail-under=85
+
+  frontend-quality-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.16.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install frontend dependencies
+        run: pnpm --dir frontend install --frozen-lockfile
+      - name: Frontend static quality
+        run: |
+          pnpm --dir frontend format:check
+          pnpm --dir frontend lint
+          pnpm --dir frontend typecheck
+          pnpm --dir frontend test
+          pnpm --dir frontend build
+
+  fixed-fixture-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.16.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install frontend and Chromium
+        run: |
+          pnpm --dir frontend install --frozen-lockfile
+          pnpm --dir frontend exec playwright install --with-deps chromium
+      - name: Offline product E2E
+        run: pnpm --dir frontend e2e

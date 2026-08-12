@@ -1,0 +1,107 @@
+{
+  "benchmark": "2800.HK",
+  "benchmark_board_lot": {
+    "confirmed": true,
+    "lot_size": 100,
+    "source": "USER",
+    "verified_at": "2024-01-06T00:00:00+00:00"
+  },
+  "benchmark_cost_config": {
+    "afrc_transaction_levy_rate": 0.0,
+    "broker_commission_rate": 0.0,
+    "broker_minimum_commission": 0.0,
+    "buy_stamp_duty_rate": null,
+    "sell_stamp_duty_rate": null,
+    "settlement_fee_rate": 0.0,
+    "slippage_rate": 0.0,
+    "stamp_duty_rate": 0.0,
+    "trading_fee_rate": 0.0,
+    "transaction_levy_rate": 0.0
+  },
+  "benchmark_metrics": {
+    "annualized_volatility": 0.6628977873542813,
+    "average_holding_period": null,
+    "average_trade_return": null,
+    "cagr": 4366352090.482958,
+    "calmar_ratio": null,
+    "closed_trade_count": 0,
+    "cost_to_gross_profit_ratio": null,
+    "final_equity": 12000.0,
+    "initial_equity": 10000.0,
+    "market_exposure": 1.0,
+    "max_drawdown": 0.0,
+    "open_trade_count": 1,
+    "profit_factor": null,
+    "sharpe_ratio": 17.964726473136533,
+    "total_return": 0.19999999999999996,
+    "total_slippage_cost": 0.0,
+    "total_trading_costs": 0.0,
+    "turnover": 0.8968609865470852,
+    "win_rate": null
+  },
+  "board_lot": {
+    "confirmed": true,
+    "lot_size": 100,
+    "source": "USER",
+    "verified_at": "2024-01-06T00:00:00+00:00"
+  },
+  "cost_config": {
+    "afrc_transaction_levy_rate": 0.0,
+    "broker_commission_rate": 0.0,
+    "broker_minimum_commission": 0.0,
+    "buy_stamp_duty_rate": null,
+    "sell_stamp_duty_rate": null,
+    "settlement_fee_rate": 0.0,
+    "slippage_rate": 0.0,
+    "stamp_duty_rate": 0.0,
+    "trading_fee_rate": 0.0,
+    "transaction_levy_rate": 0.0
+  },
+  "date_range": {
+    "actual_end": "2024-01-05",
+    "actual_start": "2024-01-02",
+    "requested_end": "2024-01-05",
+    "requested_start": "2024-01-02"
+  },
+  "initial_capital": 10000.0,
+  "market_data": {
+    "adjustment_method": "fixed adjusted OHLC",
+    "cache_status": "LIVE",
+    "data_sha256": "6e6c98c856e19db59e4bfc4087278f232f6be3acb5d6c998153d0b07e7ea7276",
+    "fetched_at_utc": "2024-01-06T00:00:00+00:00",
+    "missing_expected_sessions": [],
+    "source": "Bundled offline smoke fixture",
+    "source_version": "1",
+    "warmup_rows": 2
+  },
+  "run_id": "ed34a165606e87cf",
+  "schema_version": 1,
+  "strategy": {
+    "long_window": 2,
+    "name": "SMA 双均线趋势",
+    "short_window": 1
+  },
+  "strategy_metrics": {
+    "annualized_volatility": 5.556077753235641,
+    "average_holding_period": 3.0,
+    "average_trade_return": 0.2,
+    "cagr": 4366352090.482958,
+    "calmar_ratio": 13099056271.448872,
+    "closed_trade_count": 1,
+    "cost_to_gross_profit_ratio": 0.0,
+    "final_equity": 12000.0,
+    "initial_equity": 10000.0,
+    "market_exposure": 0.75,
+    "max_drawdown": -0.33333333333333337,
+    "open_trade_count": 0,
+    "profit_factor": null,
+    "sharpe_ratio": 4.157609203101498,
+    "total_return": 0.19999999999999996,
+    "total_slippage_cost": 0.0,
+    "total_trading_costs": 0.0,
+    "turnover": 2.0952380952380953,
+    "win_rate": 1.0
+  },
+  "symbol": "0700.HK",
+  "trade_count": 1
+}

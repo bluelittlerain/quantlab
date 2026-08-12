@@ -1,0 +1,76 @@
+name: Bug report
+description: Report a reproducible QuantLab defect with redacted diagnostics.
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: input
+    id: version
+    attributes:
+      label: QuantLab version
+      placeholder: "0.1.1"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 24H2"
+    validations:
+      required: true
+  - type: dropdown
+    id: launch_method
+    attributes:
+      label: Run method
+      options:
+        - Windows ZIP / QuantLab.exe
+        - Python / Streamlit
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: parameters
+    attributes:
+      label: Backtest parameters
+      description: Include dates, SMA windows, capital, fee and slippage. Do not attach personal data.
+    validations:
+      required: true
+  - type: dropdown
+    id: browser_tools
+    attributes:
+      label: IDM or browser extensions
+      description: State whether IDM or extensions were active when the issue occurred.
+      options:
+        - IDM active
+        - Browser extensions active
+        - Both active
+        - Neither active
+        - Unknown
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: "1. Start QuantLab\n2. ...\n3. Observe ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs
+      description: Remove usernames, absolute paths, cookies, tokens and personal trading data.
+      render: shell
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: I removed credentials, personal data and machine-specific absolute paths.
+          required: true

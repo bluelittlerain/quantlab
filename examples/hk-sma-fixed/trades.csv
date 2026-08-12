@@ -1,0 +1,2 @@
+﻿run_id,trade_id,status,entry_date,entry_raw_price,entry_execution_price,quantity,entry_total_cost,exit_date,exit_raw_price,exit_execution_price,exit_total_cost,holding_days,gross_pnl,net_pnl,net_return,total_cost
+ed34a165606e87cf,1,CLOSED,2024-01-02,10,10,1000,0,2024-01-05,12,12,0,3,2000,2000,0.2,0

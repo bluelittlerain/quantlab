@@ -1,0 +1,141 @@
+name: Windows Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing annotated tag to build and publish"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  PYTHONHASHSEED: "0"
+  QUANTLAB_OFFLINE: "1"
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+  TZ: UTC
+
+jobs:
+  build-windows-release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+
+    steps:
+      - name: Configure LF checkout
+        shell: pwsh
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Verify release source
+        shell: pwsh
+        run: |
+          $releaseTag = $env:RELEASE_TAG
+          if ($releaseTag -notmatch '^v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$') {
+            throw "Invalid release tag: $releaseTag"
+          }
+
+          $tagRef = "refs/tags/$releaseTag"
+          $tagObjectType = (git cat-file -t $tagRef).Trim()
+          if ($LASTEXITCODE -ne 0 -or $tagObjectType -ne "tag") {
+            throw "Release ref must be an existing annotated tag: $releaseTag"
+          }
+
+          $head = (git rev-parse HEAD).Trim()
+          $tagCommit = (git rev-parse "$tagRef^{commit}").Trim()
+          Write-Host "RELEASE_TAG=$releaseTag"
+          Write-Host "CHECKOUT_SHA=$head"
+          Write-Host "TAG_COMMIT=$tagCommit"
+          Write-Host "CORE_AUTOCRLF=$((git config --get core.autocrlf).Trim())"
+          Write-Host "CORE_EOL=$((git config --get core.eol).Trim())"
+
+          if ($head -ne $tagCommit) {
+            throw "Checkout $head does not match $releaseTag at $tagCommit."
+          }
+
+          $status = git status --short
+          if ($status) {
+            Write-Host $status
+            throw "Release checkout is not clean."
+          }
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.16.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install locked dependencies
+        run: |
+          python -m pip install --require-hashes -r requirements.lock
+          python -m pip install --no-build-isolation --no-deps -e .
+
+      - name: Confirm tag matches package version
+        shell: pwsh
+        run: |
+          $version = (python -c "from quant_lab import __version__; print(__version__)").Trim()
+          if ("v$version" -ne $env:RELEASE_TAG) {
+            throw "Tag $env:RELEASE_TAG does not match package version v$version."
+          }
+          $releaseNotes = "RELEASE-NOTES-$($env:RELEASE_TAG).md"
+          if (-not (Test-Path -LiteralPath $releaseNotes -PathType Leaf)) {
+            throw "Release notes are missing: $releaseNotes"
+          }
+
+      - name: Ruff lint and format
+        run: |
+          python -m ruff check .
+          python -m ruff format --check .
+
+      - name: Frontend quality gate
+        run: |
+          pnpm --dir frontend install --frozen-lockfile
+          pnpm --dir frontend format:check
+          pnpm --dir frontend lint
+          pnpm --dir frontend typecheck
+          pnpm --dir frontend test
+          pnpm --dir frontend build
+
+      - name: Offline tests and branch coverage
+        run: |
+          python -m coverage erase
+          python -m coverage run -m unittest discover -s tests
+          python -m coverage report --fail-under=85
+
+      - name: Build locked Windows bundle
+        shell: pwsh
+        run: packaging/windows/build_release.ps1
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: RELEASE-NOTES-${{ env.RELEASE_TAG }}.md
+          draft: false
+          files: |
+            release/QuantLab-v*-windows-x64.zip
+            release/SHA256SUMS.txt
+            RELEASE-NOTES-v*.md
+          name: QuantLab ${{ env.RELEASE_TAG }}
+          prerelease: false
+          tag_name: ${{ env.RELEASE_TAG }}

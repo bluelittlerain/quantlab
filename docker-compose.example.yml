@@ -1,0 +1,19 @@
+services:
+  quantlab:
+    build:
+      context: .
+    ports:
+      - "8000:8000"
+    environment:
+      QUANTLAB_MODE: WEB
+      QUANTLAB_DATA_DIR: /data
+      QUANTLAB_FRONTEND_DIR: /app/frontend
+      QUANTLAB_HOST: 0.0.0.0
+      QUANTLAB_PORT: 8000
+      QUANTLAB_CORS_ORIGINS: ""
+    volumes:
+      - quantlab-data:/data
+    restart: unless-stopped
+
+volumes:
+  quantlab-data:
