@@ -194,8 +194,8 @@ class RepositoryReleaseTests(unittest.TestCase):
     def test_release_workflow_supports_tag_push_and_existing_tag_dispatch(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 
-        # Future tags publish automatically, while workflow_dispatch can safely
-        # recover a release for an annotated tag that already exists.
+        # Both triggers only build verified candidates. Publishing is a separate
+        # explicit dispatch, after all gates have completed on the tag commit.
         self.assertIn('      - "v*"', workflow)
         self.assertIn("workflow_dispatch:", workflow)
         self.assertRegex(
@@ -226,14 +226,11 @@ class RepositoryReleaseTests(unittest.TestCase):
         self.assertIn('git rev-parse "$tagRef^{commit}"', workflow)
         self.assertIn("git status --short", workflow)
 
-        # Version identity, release notes, and the GitHub Release all bind to
-        # the same resolved tag for both automatic and recovery runs.
+        # Version identity and notes still bind to the selected tag.
         self.assertIn('if ("v$version" -ne $env:RELEASE_TAG)', workflow)
         self.assertIn('"RELEASE-NOTES-$($env:RELEASE_TAG).md"', workflow)
-        self.assertIn("body_path: RELEASE-NOTES-${{ env.RELEASE_TAG }}.md", workflow)
-        self.assertIn("tag_name: ${{ env.RELEASE_TAG }}", workflow)
-        self.assertIn("draft: false", workflow)
-        self.assertIn("prerelease: false", workflow)
+        self.assertNotIn("softprops/action-gh-release", workflow)
+        self.assertNotIn("contents: write", workflow)
 
         # Recovery retains every production release quality gate and artifact.
         self.assertIn("runs-on: windows-latest", workflow)
@@ -249,10 +246,64 @@ class RepositoryReleaseTests(unittest.TestCase):
         self.assertIn("coverage run -m unittest discover -s tests", workflow)
         self.assertIn("coverage report --fail-under=85", workflow)
         self.assertIn("build_release.ps1", workflow)
-        self.assertIn("release/QuantLab-v*-windows-x64.zip", workflow)
-        self.assertIn("release/SHA256SUMS.txt", workflow)
         self.assertIn("timeout-minutes: 30", workflow)
-        self.assertRegex(workflow, r"build-windows-release:[\s\S]+?permissions:\s+contents: write")
+
+    def test_release_build_depends_on_reused_ci_at_the_exact_tag_sha(self) -> None:
+        release = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+        ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        quality = release.split("  release-quality-gates:\n", 1)[1].split(
+            "  build-windows-release:\n", 1
+        )[0]
+        build = release.split("  build-windows-release:\n", 1)[1]
+        self.assertIn("needs: release-source", quality)
+        self.assertIn("uses: ./.github/workflows/ci.yml", quality)
+        self.assertIn("source_sha: ${{ needs.release-source.outputs.source_sha }}", quality)
+        self.assertIn("needs: [release-source, release-quality-gates]", build)
+        self.assertIn("ref: ${{ needs.release-source.outputs.source_sha }}", build)
+        self.assertNotIn("always()", build)
+        self.assertNotIn("continue-on-error", release + ci)
+        self.assertIn("workflow_call:", ci)
+        self.assertEqual(ci.count("ref: ${{ inputs.source_sha || github.sha }}"), 3)
+        self.assertIn("pnpm --dir frontend e2e", ci)
+        self.assertLess(build.index("build_release.ps1"), build.index("smoke_watchdog.ps1"))
+        self.assertLess(build.index("smoke_watchdog.ps1"), build.index("release_guard.py record"))
+        self.assertLess(build.index("release_guard.py record"), build.index("upload-artifact@v4"))
+        self.assertIn("-TimeoutSeconds 120", build)
+        self.assertIn("dist/windows/QuantLab/QuantLab.exe", build)
+        self.assertIn("ref: ${{ github.workflow_sha }}", build)
+        self.assertIn("./release-tools/scripts/run_windows_smoke_watchdog.ps1", build)
+        self.assertIn("if-no-files-found: error", build)
+
+    def test_publication_requires_explicit_approval_of_a_successful_candidate(self) -> None:
+        workflow = (ROOT / ".github/workflows/publish-release.yml").read_text(encoding="utf-8")
+        triggers = workflow.split("\npermissions:", 1)[0]
+        self.assertIn("workflow_dispatch:", triggers)
+        for event in ("push:", "pull_request:", "workflow_run:"):
+            self.assertNotIn(event, triggers)
+        for field in ("release_tag:", "expected_sha:", "build_run_id:", "approve_publication:"):
+            self.assertIn(field, triggers)
+        self.assertIn("default: false", triggers)
+        verify, publish = workflow.split("  publish:\n", 1)
+        self.assertIn("github.ref == 'refs/heads/main' && inputs.approve_publication", verify)
+        self.assertNotIn("contents: write", verify)
+        self.assertIn("needs: verify-candidate", publish)
+        self.assertIn("contents: write", publish)
+        self.assertIn("release_guard.py inspect", verify)
+        self.assertIn("release_guard.py verify", verify)
+        self.assertLess(
+            publish.index("release_guard.py verify"), publish.index("action-gh-release")
+        )
+        self.assertIn("artifact-ids: ${{ needs.verify-candidate.outputs.artifact_id }}", publish)
+        self.assertIn("run-id: ${{ inputs.build_run_id }}", publish)
+        self.assertIn("tag_name: ${{ env.RELEASE_TAG }}", publish)
+        self.assertIn("body_path: candidate/RELEASE-NOTES-${{ env.RELEASE_TAG }}.md", publish)
+        self.assertIn("candidate/QuantLab-${{ env.RELEASE_TAG }}-windows-x64.zip", publish)
+        self.assertIn("candidate/SHA256SUMS.txt", publish)
+        self.assertIn("draft: false", publish)
+        self.assertIn("prerelease: false", publish)
+        self.assertIn("fail_on_unmatched_files: true", publish)
+        self.assertNotIn("always()", publish)
+        self.assertNotIn("continue-on-error", workflow)
 
     def test_public_project_templates_are_scope_aware(self) -> None:
         contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
