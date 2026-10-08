@@ -1,0 +1,116 @@
+name: Publish approved Windows Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing annotated tag whose verified candidate was reviewed"
+        required: true
+        type: string
+      expected_sha:
+        description: "Full 40-character tag commit SHA reviewed by the maintainer"
+        required: true
+        type: string
+      build_run_id:
+        description: "Completed successful Windows Release build run ID"
+        required: true
+        type: string
+      approve_publication:
+        description: "I reviewed the successful gates and approve a public, non-draft Release"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: publish-release-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.release_tag }}
+  EXPECTED_SHA: ${{ inputs.expected_sha }}
+  BUILD_RUN_ID: ${{ inputs.build_run_id }}
+
+jobs:
+  verify-candidate:
+    if: github.ref == 'refs/heads/main' && inputs.approve_publication
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      artifact_id: ${{ steps.inspect.outputs.artifact_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Inspect successful build and existing tag
+        id: inspect
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python scripts/release_guard.py inspect --tag "$RELEASE_TAG"
+          --sha "$EXPECTED_SHA" --run-id "$BUILD_RUN_ID"
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.inspect.outputs.artifact_id }}
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: candidate
+      - name: Verify provenance and asset checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.inspect.outputs.artifact_id }}
+        run: >-
+          python scripts/release_guard.py verify --tag "$RELEASE_TAG"
+          --sha "$EXPECTED_SHA" --run-id "$BUILD_RUN_ID"
+          --artifact-id "$ARTIFACT_ID" --directory candidate
+
+  publish:
+    needs: verify-candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.verify-candidate.outputs.artifact_id }}
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: candidate
+      - name: Recheck tag, build attempt and bytes immediately before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.verify-candidate.outputs.artifact_id }}
+        run: >-
+          python scripts/release_guard.py verify --tag "$RELEASE_TAG"
+          --sha "$EXPECTED_SHA" --run-id "$BUILD_RUN_ID"
+          --artifact-id "$ARTIFACT_ID" --directory candidate
+      - name: Publish approved assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ env.EXPECTED_SHA }}
+          name: QuantLab ${{ env.RELEASE_TAG }}
+          body_path: candidate/RELEASE-NOTES-${{ env.RELEASE_TAG }}.md
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: |
+            candidate/QuantLab-${{ env.RELEASE_TAG }}-windows-x64.zip
+            candidate/SHA256SUMS.txt
+            candidate/RELEASE-NOTES-${{ env.RELEASE_TAG }}.md

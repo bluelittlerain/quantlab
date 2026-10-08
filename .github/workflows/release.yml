@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Existing annotated tag to build and publish"
+        description: "Existing annotated tag to validate and build (does not publish)"
         required: true
         type: string
 
@@ -20,12 +20,17 @@ env:
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
   TZ: UTC
 
+concurrency:
+  group: release-build-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
-  build-windows-release:
+  release-source:
     runs-on: windows-latest
-    timeout-minutes: 30
-    permissions:
-      contents: write
+    timeout-minutes: 5
+    outputs:
+      source_sha: ${{ steps.source.outputs.source_sha }}
+      tag_object: ${{ steps.source.outputs.tag_object }}
 
     steps:
       - name: Configure LF checkout
@@ -41,6 +46,7 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
 
       - name: Verify release source
+        id: source
         shell: pwsh
         run: |
           $releaseTag = $env:RELEASE_TAG
@@ -71,6 +77,33 @@ jobs:
             Write-Host $status
             throw "Release checkout is not clean."
           }
+          "source_sha=$tagCommit" >> $env:GITHUB_OUTPUT
+          "tag_object=$((git rev-parse $tagRef).Trim())" >> $env:GITHUB_OUTPUT
+
+  # These are the same gates as CI, explicitly bound to the resolved tag SHA.
+  # An independent push CI finishing later cannot bypass this dependency.
+  release-quality-gates:
+    needs: release-source
+    uses: ./.github/workflows/ci.yml
+    with:
+      source_sha: ${{ needs.release-source.outputs.source_sha }}
+
+  build-windows-release:
+    needs: [release-source, release-quality-gates]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Configure LF checkout
+        shell: pwsh
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.release-source.outputs.source_sha }}
 
       - uses: actions/setup-python@v5
         with:
@@ -127,15 +160,37 @@ jobs:
         shell: pwsh
         run: packaging/windows/build_release.ps1
 
-      - name: Publish release assets
-        uses: softprops/action-gh-release@v2
+      # The trusted workflow version supplies the publication guard, even when
+      # dispatch rebuilds a tag that predates the split release workflow.
+      - uses: actions/checkout@v4
         with:
-          body_path: RELEASE-NOTES-${{ env.RELEASE_TAG }}.md
-          draft: false
-          files: |
-            release/QuantLab-v*-windows-x64.zip
-            release/SHA256SUMS.txt
-            RELEASE-NOTES-v*.md
-          name: QuantLab ${{ env.RELEASE_TAG }}
-          prerelease: false
-          tag_name: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+          ref: ${{ github.workflow_sha }}
+          path: release-tools
+
+      - name: Packaged offline smoke (120 second watchdog)
+        shell: pwsh
+        timeout-minutes: 3
+        run: >-
+          ./release-tools/scripts/run_windows_smoke_watchdog.ps1
+          -Executable dist/windows/QuantLab/QuantLab.exe
+          -Port 32117
+          -TimeoutSeconds 120
+          -ArtifactDirectory "${{ runner.temp }}/quantlab-release-smoke"
+
+      - name: Record verified release evidence
+        env:
+          SOURCE_SHA: ${{ needs.release-source.outputs.source_sha }}
+          TAG_OBJECT: ${{ needs.release-source.outputs.tag_object }}
+        run: >-
+          python release-tools/scripts/release_guard.py record
+          --directory release --tag "$env:RELEASE_TAG"
+          --sha "$env:SOURCE_SHA" --tag-object "$env:TAG_OBJECT"
+
+      - name: Upload verified candidate (no GitHub Release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release-${{ needs.release-source.outputs.source_sha }}-${{ github.run_attempt }}
+          path: release/
+          if-no-files-found: error
+          retention-days: 14

@@ -983,6 +983,7 @@ class WindowsPackagingTests(unittest.TestCase):
         self.assertIn('"--smoke-test"', script)
         for marker in (
             "SMOKE_START",
+            "OFFLINE_FIXTURE_OK",
             "SERVICE_PID",
             "HTTP_READY",
             "CLEANUP_START",

@@ -142,6 +142,7 @@ $PortReleased = -not (Test-LocalPortListening $Port)
 $SmokeLog = Read-AppendedUtf8 $ApplicationLog $ApplicationLogOffset
 $RequiredMarkers = @(
     "SMOKE_START",
+    "OFFLINE_FIXTURE_OK",
     "SERVICE_PID",
     "HTTP_READY",
     "CLEANUP_START",
